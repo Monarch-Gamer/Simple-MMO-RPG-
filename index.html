@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>RealmStep MMO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    body { background-color: #0b0e14; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; overscroll-behavior-y: contain; }
+    .rarity-Common { color: #9ca3af; border-color: #4b5563; }
+    .rarity-Uncommon { color: #4ade80; border-color: #16a34a; }
+    .rarity-Rare { color: #60a5fa; border-color: #2563eb; }
+    .rarity-Epic { color: #c084fc; border-color: #9333ea; }
+    .rarity-Legendary { color: #fbbf24; border-color: #d97706; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    .shake { animation: shake 0.2s ease-in-out; }
+  </style>
+</head>
+<body class="max-w-md mx-auto min-h-screen flex flex-col border-x border-slate-800 bg-[#0f131a]">
+
+  <!-- TOP STATUS HUD -->
+  <header class="sticky top-0 z-20 bg-[#141923] border-b border-slate-800 p-3 shadow-md">
+    <div class="flex justify-between items-center text-xs font-semibold mb-1.5">
+      <div class="flex items-center gap-2">
+        <span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded">LVL <span id="hud-lvl">1</span></span>
+        <span class="text-slate-300 font-bold" id="hud-name">Adventurer</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-amber-400">🪙 <span id="hud-gold">100</span></span>
+        <span class="text-cyan-400">💎 <span id="hud-gems">5</span></span>
+      </div>
+    </div>
+
+    <!-- XP BAR -->
+    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-2">
+      <div id="hud-xp-bar" class="bg-indigo-500 h-full transition-all duration-200" style="width: 0%"></div>
+    </div>
+
+    <!-- HP / ENERGY / QP -->
+    <div class="grid grid-cols-3 gap-2 text-[11px] font-medium">
+      <div class="bg-slate-900/90 px-2 py-1 rounded border border-slate-800 flex justify-between">
+        <span class="text-rose-400">❤️ HP</span>
+        <span id="hud-hp">100/100</span>
+      </div>
+      <div class="bg-slate-900/90 px-2 py-1 rounded border border-slate-800 flex justify-between">
+        <span class="text-yellow-400">⚡ NRG</span>
+        <span id="hud-nrg">10/10</span>
+      </div>
+      <div class="bg-slate-900/90 px-2 py-1 rounded border border-slate-800 flex justify-between">
+        <span class="text-emerald-400">📜 QP</span>
+        <span id="hud-qp">5/5</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT AREA -->
+  <main id="app-content" class="flex-1 p-3 pb-24 overflow-y-auto space-y-3"></main>
+
+  <!-- COMBAT MODAL -->
+  <div id="combat-modal" class="hidden fixed inset-0 z-40 bg-black/85 flex items-center justify-center p-4">
+    <div id="combat-box" class="bg-[#161c27] border border-slate-700 rounded-xl w-full max-w-sm p-4 space-y-3 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <span id="combat-type-badge" class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold">Monster Encounter</span>
+        <span class="text-xs text-slate-400" id="enemy-lvl">Lvl 1</span>
+      </div>
+
+      <div class="text-center py-2">
+        <div class="text-4xl mb-1" id="enemy-icon">👺</div>
+        <h3 class="font-bold text-lg text-white" id="enemy-name">Forest Goblin</h3>
+        <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden mt-2 border border-slate-700">
+          <div id="enemy-hp-bar" class="bg-rose-500 h-full transition-all duration-150" style="width: 100%"></div>
+        </div>
+        <p class="text-xs text-slate-400 mt-1" id="enemy-hp-text">50 / 50 HP</p>
+      </div>
+
+      <div id="combat-log" class="bg-slate-950 border border-slate-800 rounded p-2.5 h-28 overflow-y-auto text-xs space-y-1 font-mono text-slate-300"></div>
+
+      <div id="combat-actions" class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="attackEnemy()" class="bg-rose-600 active:bg-rose-700 text-white font-bold py-2.5 rounded-lg text-sm">⚔️ Attack</button>
+        <button onclick="usePotionInCombat()" class="bg-emerald-600 active:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm">🧪 Heal (<span id="combat-pots">2</span>)</button>
+        <button onclick="fleeCombat()" class="col-span-2 bg-slate-800 active:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs font-semibold">🏃 Flee Battle</button>
+      </div>
+      <div id="combat-end-actions" class="hidden">
+        <button onclick="closeCombat()" class="w-full bg-indigo-600 active:bg-indigo-700 text-white font-bold py-2.5 rounded-lg text-sm">Continue Adventure</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAVIGATION -->
+  <nav class="fixed bottom-0 w-full max-w-md bg-[#141923] border-t border-slate-800 grid grid-cols-5 text-[11px] font-semibold z-30">
+    <button onclick="switchTab('travel')" id="nav-travel" class="py-2.5 flex flex-col items-center gap-0.5 text-indigo-400">
+      <span class="text-base">🥾</span><span>Travel</span>
+    </button>
+    <button onclick="switchTab('character')" id="nav-character" class="py-2.5 flex flex-col items-center gap-0.5 text-slate-400">
+      <span class="text-base">🛡️</span><span>Hero</span>
+    </button>
+    <button onclick="switchTab('quests')" id="nav-quests" class="py-2.5 flex flex-col items-center gap-0.5 text-slate-400">
+      <span class="text-base">📜</span><span>Quests</span>
+    </button>
+    <button onclick="switchTab('pvp')" id="nav-pvp" class="py-2.5 flex flex-col items-center gap-0.5 text-slate-400">
+      <span class="text-base">⚔️</span><span>Arena</span>
+    </button>
+    <button onclick="switchTab('town')" id="nav-town" class="py-2.5 flex flex-col items-center gap-0.5 text-slate-400">
+      <span class="text-base">🏰</span><span>Town</span>
+    </button>
+  </nav>
+
+  <script>
+    // --- GAME DATA & CONFIG ---
+    const ZONES = [
+      { id: 0, name: "Starting Meadows", minLvl: 1, icon: "🌿", desc: "Rolling green hills filled with weak slimes and goblins." },
+      { id: 1, name: "Whispering Woods", minLvl: 4, icon: "🌲", desc: "Dark ancient forest inhabited by bandits and dire wolves." },
+      { id: 2, name: "Cinder Peaks", minLvl: 8, icon: "🌋", desc: "Scorched volcanic ridges guarded by fire elementals and drakes." }
+    ];
+
+    const MONSTERS = [
+      { zone: 0, name: "Green Slime", icon: "🟢", lvl: 1, hp: 35, atk: 5, def: 1, xp: 18, gold: 12 },
+      { zone: 0, name: "Forest Goblin", icon: "👺", lvl: 2, hp: 50, atk: 8, def: 2, xp: 28, gold: 20 },
+      { zone: 0, name: "Wild Boar", icon: "🐗", lvl: 3, hp: 70, atk: 11, def: 3, xp: 40, gold: 28 },
+      { zone: 1, name: "Shadow Bandit", icon: "🥷", lvl: 4, hp: 100, atk: 16, def: 5, xp: 65, gold: 45 },
+      { zone: 1, name: "Dire Wolf", icon: "🐺", lvl: 6, hp: 135, atk: 22, def: 7, xp: 90, gold: 65 },
+      { zone: 2, name: "Magma Golem", icon: "🗿", lvl: 8, hp: 200, atk: 30, def: 12, xp: 140, gold: 110 },
+      { zone: 2, name: "Cinder Drake", icon: "🐉", lvl: 10, hp: 280, atk: 42, def: 16, xp: 220, gold: 180 }
+    ];
+
+    const ITEM_POOL = [
+      { id: "w1", name: "Rusty Dagger", slot: "weapon", rarity: "Common", atk: 4, def: 0, value: 15, icon: "🗡️" },
+      { id: "a1", name: "Leather Tunic", slot: "armor", rarity: "Common", atk: 0, def: 3, value: 15, icon: "👕" },
+      { id: "w2", name: "Iron Broadsword", slot: "weapon", rarity: "Uncommon", atk: 9, def: 1, value: 55, icon: "⚔️" },
+      { id: "a2", name: "Chainmail Vest", slot: "armor", rarity: "Uncommon", atk: 0, def: 7, value: 55, icon: "🦺" },
+      { id: "r1", name: "Copper Ring", slot: "ring", rarity: "Uncommon", atk: 3, def: 3, value: 50, icon: "💍" },
+      { id: "w3", name: "Runed Claymore", slot: "weapon", rarity: "Rare", atk: 18, def: 2, value: 160, icon: "🗡️" },
+      { id: "a3", name: "Knight Plate", slot: "armor", rarity: "Rare", atk: 1, def: 15, value: 160, icon: "🛡️" },
+      { id: "w4", name: "Dragonfang Blade", slot: "weapon", rarity: "Epic", atk: 32, def: 5, value: 450, icon: "🔥" },
+      { id: "r2", name: "Amulet of Kings", slot: "ring", rarity: "Legendary", atk: 20, def: 20, value: 1200, icon: "👑" }
+    ];
+
+    const FLAVOR_TEXTS = [
+      "You tripped over a suspiciously shaped turnip and found {gold} Gold.",
+      "A traveling bard sang a terrible song and paid you {gold} Gold not to tell anyone.",
+      "You helped a lost merchant fix his wagon wheel. Reward: {gold} Gold!",
+      "You found a shiny coin purse wedged under a mossy rock (+{gold} Gold).",
+      "A friendly stray dog led you to a buried stash of {gold} Gold."
+    ];
+
+    const RIVALS = [
+      { name: "Sir_Galahad", lvl: 2, hp: 75, atk: 10, def: 4, gold: 140, icon: "🤺" },
+      { name: "NightBlade99", lvl: 4, hp: 120, atk: 18, def: 7, gold: 320, icon: "🥷" },
+      { name: "ValkyrieX", lvl: 7, hp: 190, atk: 28, def: 12, gold: 680, icon: "🧝‍♀️" },
+      { name: "DreadLord", lvl: 10, hp: 300, atk: 45, def: 20, gold: 1450, icon: "💀" }
+    ];
+
+    // --- STATE MANAGEMENT ---
+    const defaultState = {
+      name: "Hero",
+      lvl: 1,
+      xp: 0,
+      gold: 100,
+      bankGold: 0,
+      gems: 5,
+      hp: 100,
+      maxHp: 100,
+      nrg: 10,
+      maxNrg: 10,
+      qp: 5,
+      maxQp: 5,
+      statPoints: 0,
+      stats: { str: 5, def: 3, dex: 3 },
+      zone: 0,
+      steps: 0,
+      kills: 0,
+      potions: 3,
+      materials: { wood: 0, ore: 0 },
+      equipped: { weapon: null, armor: null, ring: null },
+      inventory: [ { ...ITEM_POOL[0], uid: 1 } ],
+      stepLog: ["Welcome to RealmStep! Tap 'Take a Step' to begin your journey."],
+      jobEndTime: 0,
+      worldBossHp: 50000,
+      worldBossMax: 50000,
+      lastTick: Date.now()
+    };
+
+    let state = JSON.parse(localStorage.getItem("realmstep_save")) || defaultState;
+    let activeTab = "travel";
+    let stepCooldown = false;
+    let currentCombat = null;
+
+    function saveGame() {
+      localStorage.setItem("realmstep_save", JSON.stringify(state));
+      updateHUD();
+    }
+
+    // --- DERIVED STATS ---
+    function getTotalStats() {
+      let atk = state.stats.str * 2;
+      let def = state.stats.def * 1.5;
+      let crit = Math.min(50, state.stats.dex * 2);
+      Object.values(state.equipped).forEach(item => {
+        if (item) {
+          atk += item.atk;
+          def += item.def;
+        }
+      });
+      return { atk: Math.floor(atk), def: Math.floor(def), crit };
+    }
+
+    function xpNeeded(lvl) {
+      return lvl * 100;
+    }
+
+    function gainXp(amount) {
+      state.xp += amount;
+      while (state.xp >= xpNeeded(state.lvl)) {
+        state.xp -= xpNeeded(state.lvl);
+        state.lvl++;
+        state.statPoints += 3;
+        state.maxHp += 20;
+        state.hp = state.maxHp;
+        addLog(`🎉 LEVEL UP! You are now Level ${state.lvl}! (+3 Stat Points)`);
+      }
+    }
+
+    // --- HUD & REGENERATION ---
+    function updateHUD() {
+      document.getElementById("hud-lvl").textContent = state.lvl;
+      document.getElementById("hud-gold").textContent = state.gold.toLocaleString();
+      document.getElementById("hud-gems").textContent = state.gems;
+      document.getElementById("hud-hp").textContent = `${state.hp}/${state.maxHp}`;
+      document.getElementById("hud-nrg").textContent = `${state.nrg}/${state.maxNrg}`;
+      document.getElementById("hud-qp").textContent = `${state.qp}/${state.maxQp}`;
+      const pct = Math.min(100, (state.xp / xpNeeded(state.lvl)) * 100);
+      document.getElementById("hud-xp-bar").style.width = `${pct}%`;
+    }
+
+    setInterval(() => {
+      let changed = false;
+      if (state.nrg < state.maxNrg && Math.random() < 0.25) { state.nrg++; changed = true; }
+      if (state.qp < state.maxQp && Math.random() < 0.2) { state.qp++; changed = true; }
+      if (state.hp < state.maxHp && !currentCombat && Math.random() < 0.4) {
+        state.hp = Math.min(state.maxHp, state.hp + Math.ceil(state.maxHp * 0.05));
+        changed = true;
+      }
+      if (changed) saveGame();
+    }, 4000);
+
+    // --- NAVIGATION ---
+    function switchTab(tab) {
+      activeTab = tab;
+      ["travel", "character", "quests", "pvp", "town"].forEach(t => {
+        const el = document.getElementById(`nav-${t}`);
+        el.className = t === tab
+          ? "py-2.5 flex flex-col items-center gap-0.5 text-indigo-400 bg-slate-900/60"
+          : "py-2.5 flex flex-col items-center gap-0.5 text-slate-400";
+      });
+      render();
+    }
+
+    function addLog(msg) {
+      state.stepLog.unshift(msg);
+      if (state.stepLog.length > 15) state.stepLog.pop();
+    }
+
+    // --- TRAVEL / STEPPING LOOP ---
+    function takeStep() {
+      if (stepCooldown) return;
+      if (state.hp <= 0) {
+        state.hp = Math.floor(state.maxHp * 0.5);
+        addLog("🏥 You recovered at camp with 50% HP.");
+      }
+
+      stepCooldown = true;
+      state.steps++;
+      const roll = Math.random();
+      const zoneBonus = state.zone + 1;
+
+      if (roll < 0.40) {
+        // Flavor text + Gold
+        const goldFound = Math.floor((Math.random() * 10 + 3) * zoneBonus);
+        state.gold += goldFound;
+        gainXp(5 * zoneBonus);
+        const template = FLAVOR_TEXTS[Math.floor(Math.random() * FLAVOR_TEXTS.length)];
+        addLog(`🥾 ${template.replace("{gold}", goldFound)} (+${5 * zoneBonus} XP)`);
+      } else if (roll < 0.70) {
+        // Enemy Encounter
+        const zoneMonsters = MONSTERS.filter(m => m.zone === state.zone);
+        const mob = zoneMonsters[Math.floor(Math.random() * zoneMonsters.length)];
+        addLog(`⚠️ Ambush! A Level ${mob.lvl} ${mob.name} blocks your path!`);
+        startCombat({ ...mob, maxHp: mob.hp, isPvP: false });
+      } else if (roll < 0.88) {
+        // Gathering Node
+        const isOre = Math.random() < 0.5;
+        const amt = Math.floor(Math.random() * 2) + 1;
+        if (isOre) {
+          state.materials.ore += amt;
+          addLog(`⛏️ You mined ${amt}x Iron Ore! (+${8 * zoneBonus} XP)`);
+        } else {
+          state.materials.wood += amt;
+          addLog(`🪓 You chopped ${amt}x Timber! (+${8 * zoneBonus} XP)`);
+        }
+        gainXp(8 * zoneBonus);
+      } else {
+        // Item Drop
+        const maxPoolIdx = Math.min(ITEM_POOL.length - 1, (state.zone + 1) * 3);
+        const drop = ITEM_POOL[Math.floor(Math.random() * maxPoolIdx)];
+        state.inventory.push({ ...drop, uid: Date.now() + Math.random() });
+        addLog(`🎁 LOOT DROP! You found [${drop.rarity}] ${drop.icon} ${drop.name}!`);
+      }
+
+      saveGame();
+      render();
+
+      setTimeout(() => {
+        stepCooldown = false;
+        const btn = document.getElementById("step-btn");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "🥾 Take a Step";
+          btn.classList.remove("opacity-50");
+        }
+      }, 1500);
+    }
+
+    function changeZone(zId) {
+      if (state.lvl >= ZONES[zId].minLvl) {
+        state.zone = zId;
+        addLog(`🗺️ Traveled to ${ZONES[zId].name}.`);
+        saveGame();
+        render();
+      }
+    }
+
+    // --- COMBAT ENGINE ---
+    function startCombat(target) {
+      currentCombat = target;
+      document.getElementById("combat-modal").classList.remove("hidden");
+      document.getElementById("combat-actions").classList.remove("hidden");
+      document.getElementById("combat-end-actions").classList.add("hidden");
+      document.getElementById("combat-type-badge").textContent = target.isPvP ? "PvP Arena Duel" : "Monster Encounter";
+      document.getElementById("enemy-icon").textContent = target.icon;
+      document.getElementById("enemy-name").textContent = target.name;
+      document.getElementById("enemy-lvl").textContent = `Lvl ${target.lvl}`;
+      document.getElementById("combat-pots").textContent = state.potions;
+      document.getElementById("combat-log").innerHTML = `<div>Battle started against ${target.name}!</div>`;
+      updateCombatUI();
+    }
+
+    function updateCombatUI() {
+      if (!currentCombat) return;
+      const pct = Math.max(0, (currentCombat.hp / currentCombat.maxHp) * 100);
+      document.getElementById("enemy-hp-bar").style.width = `${pct}%`;
+      document.getElementById("enemy-hp-text").textContent = `${Math.max(0, currentCombat.hp)} / ${currentCombat.maxHp} HP`;
+      document.getElementById("combat-pots").textContent = state.potions;
+      updateHUD();
+    }
+
+    function logCombat(msg, color = "text-slate-300") {
+      const log = document.getElementById("combat-log");
+      log.innerHTML += `<div class="${color}">${msg}</div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function attackEnemy() {
+      if (!currentCombat || currentCombat.hp <= 0) return;
+      const pStats = getTotalStats();
+      const isCrit = Math.random() * 100 < pStats.crit;
+      let dmg = Math.max(2, pStats.atk - Math.floor(currentCombat.def * 0.5) + Math.floor(Math.random() * 4));
+      if (isCrit) dmg = Math.floor(dmg * 1.6);
+
+      currentCombat.hp -= dmg;
+      const box = document.getElementById("combat-box");
+      box.classList.remove("shake");
+      void box.offsetWidth;
+      box.classList.add("shake");
+
+      logCombat(`⚔️ You hit ${currentCombat.name} for ${dmg} DMG${isCrit ? " (CRIT!)" : ""}!`, "text-emerald-400");
+
+      if (currentCombat.hp <= 0) {
+        currentCombat.hp = 0;
+        updateCombatUI();
+        if (currentCombat.isPvP) {
+          const stolen = Math.floor(currentCombat.gold * 0.25);
+          state.gold += stolen;
+          gainXp(currentCombat.lvl * 25);
+          logCombat(`🏆 VICTORY! You defeated ${currentCombat.name} and stole ${stolen} Gold!`, "text-amber-400 font-bold");
+          addLog(`⚔️ Defeated ${currentCombat.name} in PvP and stole ${stolen} Gold!`);
+        } else {
+          state.kills++;
+          state.gold += currentCombat.gold;
+          gainXp(currentCombat.xp);
+          logCombat(`🏆 VICTORY! Earned +${currentCombat.xp} XP & +${currentCombat.gold} Gold!`, "text-amber-400 font-bold");
+          addLog(`⚔️ Slew ${currentCombat.name} (+${currentCombat.xp} XP, +${currentCombat.gold} Gold).`);
+        }
+        endCombatState();
+        return;
+      }
+
+      // Enemy Turn
+      const eDmg = Math.max(1, currentCombat.atk - Math.floor(pStats.def * 0.5) + Math.floor(Math.random() * 3));
+      state.hp = Math.max(0, state.hp - eDmg);
+      logCombat(`💥 ${currentCombat.name} strikes you for ${eDmg} DMG!`, "text-rose-400");
+
+      if (state.hp <= 0) {
+        logCombat(`💀 You were knocked out! Lost 10% unbanked gold.`, "text-rose-500 font-bold");
+        state.gold = Math.floor(state.gold * 0.9);
+        addLog(`💀 Knocked out by ${currentCombat.name}!`);
+        endCombatState();
+      }
+      updateCombatUI();
+    }
+
+    function usePotionInCombat() {
+      if (state.potions <= 0) return logCombat("❌ No potions left!", "text-slate-500");
+      state.potions--;
+      const heal = Math.floor(state.maxHp * 0.45);
+      state.hp = Math.min(state.maxHp, state.hp + heal);
+      logCombat(`🧪 Drank Health Potion and restored +${heal} HP!`, "text-cyan-400");
+      updateCombatUI();
+    }
+
+    function fleeCombat() {
+      logCombat("🏃 You escaped safely.");
+      endCombatState();
+    }
+
+    function endCombatState() {
+      document.getElementById("combat-actions").classList.add("hidden");
+      document.getElementById("combat-end-actions").classList.remove("hidden");
+      saveGame();
+    }
+
+    function closeCombat() {
+      currentCombat = null;
+      document.getElementById("combat-modal").classList.add("hidden");
+      render();
+    }
+
+    // --- CHARACTER & INVENTORY ---
+    function upgradeStat(stat) {
+      if (state.statPoints <= 0) return;
+      state.statPoints--;
+      state.stats[stat]++;
+      if (stat === "def") state.maxHp += 5;
+      saveGame();
+      render();
+    }
+
+    function equipItem(uid) {
+      const idx = state.inventory.findIndex(i => i.uid === uid);
+      if (idx === -1) return;
+      const item = state.inventory[idx];
+      const current = state.equipped[item.slot];
+      state.inventory.splice(idx, 1);
+      if (current) state.inventory.push(current);
+      state.equipped[item.slot] = item;
+      saveGame();
+      render();
+    }
+
+    function sellItem(uid) {
+      const idx = state.inventory.findIndex(i => i.uid === uid);
+      if (idx === -1) return;
+      const item = state.inventory[idx];
+      state.gold += item.value;
+      state.inventory.splice(idx, 1);
+      saveGame();
+      render();
+    }
+
+    // --- QUESTS, PVP & TOWN ---
+    function doQuest(qpCost, xpReward, goldReward, title) {
+      if (state.qp < qpCost) return alert("Not enough Quest Points! Wait for them to regenerate.");
+      state.qp -= qpCost;
+      state.gold += goldReward;
+      gainXp(xpReward);
+      addLog(`📜 Completed Quest: ${title} (+${xpReward} XP, +${goldReward} Gold)`);
+      saveGame();
+      render();
+    }
+
+    function fightPvP(index) {
+      if (state.nrg < 2) return alert("Need 2 Energy to battle in the Arena!");
+      state.nrg -= 2;
+      const rival = RIVALS[index];
+      startCombat({ ...rival, maxHp: rival.hp, isPvP: true });
+      saveGame();
+    }
+
+    function bankAction(type) {
+      if (type === "deposit" && state.gold > 0) {
+        state.bankGold += state.gold;
+        state.gold = 0;
+      } else if (type === "withdraw" && state.bankGold > 0) {
+        state.gold += state.bankGold;
+        state.bankGold = 0;
+      }
+      saveGame();
+      render();
+    }
+
+    function buyPotion() {
+      if (state.gold < 30) return alert("Need 30 Gold!");
+      state.gold -= 30;
+      state.potions++;
+      saveGame();
+      render();
+    }
+
+    function attackWorldBoss() {
+      if (state.nrg < 1) return alert("Need 1 Energy!");
+      state.nrg--;
+      const dmg = getTotalStats().atk * 2 + Math.floor(Math.random() * 20);
+      state.worldBossHp = Math.max(0, state.worldBossHp - dmg);
+      const reward = Math.floor(dmg * 1.5);
+      state.gold += reward;
+      gainXp(25);
+      if (state.worldBossHp === 0) {
+        state.worldBossHp = state.worldBossMax;
+        state.gems += 5;
+        alert("🐉 WORLD BOSS SLAIN! You earned 5 Bonus Diamonds!");
+      }
+      saveGame();
+      render();
+    }
+
+    // --- UI RENDERER ---
+    function render() {
+      const container = document.getElementById("app-content");
+      const currentZone = ZONES[state.zone];
+      const totals = getTotalStats();
+
+      if (activeTab === "travel") {
+        container.innerHTML = `
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4">
+            <div class="flex justify-between items-start">
+              <div>
+                <span class="text-[10px] uppercase tracking-wider text-indigo-400 font-bold">Current Location</span>
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">${currentZone.icon} ${currentZone.name}</h2>
+                <p class="text-xs text-slate-400 mt-0.5">${currentZone.desc}</p>
+              </div>
+              <span class="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300">Steps: ${state.steps}</span>
+            </div>
+
+            <button id="step-btn" onclick="takeStep()" ${stepCooldown ? "disabled" : ""} class="${stepCooldown ? "opacity-50" : ""} mt-4 w-full bg-indigo-600 active:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg text-base transition">
+              ${stepCooldown ? "⏳ Walking..." : "🥾 Take a Step"}
+            </button>
+          </div>
+
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Adventure Log</h3>
+            <div class="space-y-1.5 text-xs max-h-48 overflow-y-auto">
+              ${state.stepLog.map(l => `<div class="p-2 rounded bg-slate-900/90 border border-slate-800/80 text-slate-200">${l}</div>`).join("")}
+            </div>
+          </div>
+
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">World Regions</h3>
+            <div class="space-y-2">
+              ${ZONES.map(z => {
+                const unlocked = state.lvl >= z.minLvl;
+                const active = state.zone === z.id;
+                return `
+                  <div class="flex items-center justify-between p-2.5 rounded-lg border ${active ? "border-indigo-500 bg-indigo-950/20" : "border-slate-800 bg-slate-900/70"}">
+                    <div>
+                      <div class="text-sm font-bold ${unlocked ? "text-white" : "text-slate-500"}">${z.icon} ${z.name}</div>
+                      <div class="text-[11px] text-slate-400">Requires Level ${z.minLvl}</div>
+                    </div>
+                    <button onclick="changeZone(${z.id})" ${!unlocked || active ? "disabled" : ""} class="px-3 py-1.5 rounded text-xs font-bold ${active ? "bg-indigo-600/30 text-indigo-300" : unlocked ? "bg-slate-800 text-white active:bg-slate-700" : "bg-slate-900 text-slate-600"}">
+                      ${active ? "Current" : unlocked ? "Travel" : "Locked"}
+                    </button>
+                  </div>`;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeTab === "character") {
+        container.innerHTML = `
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4 space-y-3">
+            <div class="flex justify-between items-center">
+              <h2 class="font-bold text-base text-white">Attributes & Power</h2>
+              ${state.statPoints > 0 ? `<span class="bg-amber-500 text-black text-xs font-extrabold px-2 py-0.5 rounded animate-bounce">${state.statPoints} Pts Available!</span>` : ""}
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+              <div class="bg-slate-900 p-2 rounded border border-slate-800"><div class="text-slate-400">Total ATK</div><div class="text-rose-400 font-bold text-sm">⚔️ ${totals.atk}</div></div>
+              <div class="bg-slate-900 p-2 rounded border border-slate-800"><div class="text-slate-400">Total DEF</div><div class="text-sky-400 font-bold text-sm">🛡️ ${totals.def}</div></div>
+              <div class="bg-slate-900 p-2 rounded border border-slate-800"><div class="text-slate-400">Crit Chance</div><div class="text-amber-400 font-bold text-sm">⚡ ${totals.crit}%</div></div>
+            </div>
+            <div class="space-y-2 text-xs">
+              ${["str", "def", "dex"].map(s => `
+                <div class="flex justify-between items-center bg-slate-900/90 p-2.5 rounded border border-slate-800">
+                  <span class="uppercase font-bold text-slate-200">${s === "str" ? "Strength" : s === "def" ? "Defense" : "Dexterity"}: <span class="text-indigo-400">${state.stats[s]}</span></span>
+                  <button onclick="upgradeStat('${s}')" ${state.statPoints <= 0 ? "disabled" : ""} class="px-3 py-1 rounded font-bold ${state.statPoints > 0 ? "bg-amber-500 text-black" : "bg-slate-800 text-slate-600"}">+1</button>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Equipped Gear</h3>
+            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+              ${["weapon", "armor", "ring"].map(slot => {
+                const item = state.equipped[slot];
+                return `
+                  <div class="bg-slate-900 border ${item ? `rarity-${item.rarity}` : "border-slate-800"} p-2.5 rounded-lg">
+                    <div class="text-[10px] uppercase text-slate-500 mb-1">${slot}</div>
+                    <div class="text-xl">${item ? item.icon : "➖"}</div>
+                    <div class="font-bold truncate mt-1">${item ? item.name : "Empty"}</div>
+                    <div class="text-[10px] text-slate-400">${item ? `+${item.atk} ATK / +${item.def} DEF` : "-"}</div>
+                  </div>`;
+              }).join("")}
+            </div>
+          </div>
+
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Inventory (${state.inventory.length})</h3>
+              <span class="text-[11px] text-slate-400">🪵 ${state.materials.wood} | ⛏️ ${state.materials.ore} | 🧪 ${state.potions}</span>
+            </div>
+            <div class="space-y-2">
+              ${state.inventory.length === 0 ? `<p class="text-xs text-slate-500">Your bag is empty. Take steps to find loot!</p>` : state.inventory.map(item => `
+                <div class="flex items-center justify-between bg-slate-900 border-l-4 rarity-${item.rarity} p-2.5 rounded">
+                  <div>
+                    <div class="text-xs font-bold">${item.icon} ${item.name} <span class="text-[10px] opacity-75">(${item.rarity})</span></div>
+                    <div class="text-[11px] text-slate-400">+${item.atk} ATK, +${item.def} DEF • Worth ${item.value}g</div>
+                  </div>
+                  <div class="flex gap-1.5">
+                    <button onclick="equipItem(${item.uid})" class="bg-indigo-600 text-white text-[11px] font-bold px-2.5 py-1.5 rounded">Equip</button>
+                    <button onclick="sellItem(${item.uid})" class="bg-slate-800 text-amber-400 text-[11px] font-bold px-2 py-1.5 rounded">Sell</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeTab === "quests") {
+        container.innerHTML = `
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4 space-y-3">
+            <div>
+              <h2 class="font-bold text-base text-white">📜 Royal Quest Board</h2>
+              <p class="text-xs text-slate-400">Spend Quest Points (QP) to earn guaranteed XP and Gold.</p>
+            </div>
+            <div class="space-y-2.5">
+              <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex justify-between items-center">
+                <div>
+                  <div class="font-bold text-sm text-white">Patrol the Borders</div>
+                  <div class="text-xs text-slate-400">Cost: 1 QP • Reward: 35 XP & 40 Gold</div>
+                </div>
+                <button onclick="doQuest(1, 35, 40, 'Patrol the Borders')" class="bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Perform</button>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex justify-between items-center">
+                <div>
+                  <div class="font-bold text-sm text-white">Escort Merchant Caravan</div>
+                  <div class="text-xs text-slate-400">Cost: 2 QP • Reward: 85 XP & 110 Gold</div>
+                </div>
+                <button onclick="doQuest(2, 85, 110, 'Escort Caravan')" class="bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Perform</button>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex justify-between items-center">
+                <div>
+                  <div class="font-bold text-sm text-white">Clear Goblin Outpost</div>
+                  <div class="text-xs text-slate-400">Cost: 3 QP • Reward: 160 XP & 240 Gold</div>
+                </div>
+                <button onclick="doQuest(3, 160, 240, 'Clear Goblin Outpost')" class="bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Perform</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeTab === "pvp") {
+        container.innerHTML = `
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4 space-y-3">
+            <div>
+              <h2 class="font-bold text-base text-white">⚔️ PvP Battle Arena</h2>
+              <p class="text-xs text-slate-400">Attack rival players (Costs 2 ⚡ Energy) to steal 25% of their unbanked Gold!</p>
+            </div>
+            <div class="space-y-2">
+              ${RIVALS.map((r, idx) => `
+                <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg flex justify-between items-center">
+                  <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">${r.icon}</span>
+                    <div>
+                      <div class="font-bold text-sm text-white">${r.name} <span class="text-xs text-indigo-400">Lvl ${r.lvl}</span></div>
+                      <div class="text-[11px] text-amber-400">Unbanked Gold: 🪙 ${r.gold}</div>
+                    </div>
+                  </div>
+                  <button onclick="fightPvP(${idx})" class="bg-rose-600 active:bg-rose-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg">Attack</button>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeTab === "town") {
+        const bossPct = (state.worldBossHp / state.worldBossMax) * 100;
+        container.innerHTML = `
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4 space-y-3">
+            <h2 class="font-bold text-base text-white">🏦 Royal Vault (Bank)</h2>
+            <p class="text-xs text-slate-400">Gold stored in your vault cannot be stolen by PvP raiders.</p>
+            <div class="bg-slate-900 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+              <span class="text-xs text-slate-400">Vault Balance:</span>
+              <span class="text-base font-bold text-amber-400">🪙 ${state.bankGold.toLocaleString()}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="bankAction('deposit')" class="bg-amber-600 active:bg-amber-700 text-white font-bold py-2 rounded-lg text-xs">Deposit All</button>
+              <button onclick="bankAction('withdraw')" class="bg-slate-800 active:bg-slate-700 text-slate-200 font-bold py-2 rounded-lg text-xs">Withdraw All</button>
+            </div>
+          </div>
+
+          <div class="bg-[#161c27] border border-slate-800 rounded-xl p-4 space-y-2.5">
+            <h2 class="font-bold text-base text-white">🧪 Alchemist Shop</h2>
+            <div class="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-800">
+              <div>
+                <div class="font-bold text-sm">Health Potion (Owned: ${state.potions})</div>
+                <div class="text-xs text-slate-400">Restores 45% Max HP in battle</div>
+              </div>
+              <button onclick="buyPotion()" class="bg-indigo-600 active:bg-indigo-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Buy (30g)</button>
+            </div>
+          </div>
+
+          <div class="bg-[#161c27] border border-rose-900/50 rounded-xl p-4 space-y-2.5">
+            <div class="flex justify-between items-center">
+              <h2 class="font-bold text-base text-rose-400">🐉 World Boss: Ignis</h2>
+              <span class="text-xs text-slate-400">${state.worldBossHp.toLocaleString()} HP</span>
+            </div>
+            <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-800">
+              <div class="bg-rose-600 h-full" style="width: ${bossPct}%"></div>
+            </div>
+            <button onclick="attackWorldBoss()" class="w-full bg-rose-600 active:bg-rose-700 text-white font-bold py-2.5 rounded-lg text-xs">⚔️ Strike World Boss (1 ⚡ Energy)</button>
+          </div>
+        `;
+      }
+    }
+
+    // Initialize
+    updateHUD();
+    render();
+  </script>
+</body>
+</html>
